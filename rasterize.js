@@ -1,12 +1,11 @@
 /* GLOBAL CONSTANTS AND VARIABLES */
 
 /* assignment specific globals */
-const INPUT_TRIANGLES_URL = "https://cwiley982.github.io/prog5/triangles.json"; // triangles file loc
+const INPUT_SNAKE_URL = "https://cwiley982.github.io/prog5/snake.json"; // snake file
 const INPUT_BORDER_URL = "https://cwiley982.github.io/prog5/border.json";
-var Eye = vec3.fromValues(3.5,3.5,-3.5); // default eye position in world space
-var Center = vec3.fromValues(3.5,3.5,0); // default view direction in world space
+var Eye = vec3.fromValues(0,0,-5); // default eye position in world space
+var Center = vec3.fromValues(0,0,0); // default view direction in world space
 var Up = vec3.fromValues(0,1,0); // default view up vector
-var rotateTheta = Math.PI/50; // how much to rotate models by with each key press
 /* webgl and geometry data */
 var gl = null; // the all powerful gl object. It's all here folks!
 var inputTriangles = []; // the triangle data as loaded from input files
@@ -18,9 +17,7 @@ var triSetSizes = []; // this contains the size of each triangle set
 var triangleBuffers = []; // lists of indices into vertexBuffers by set, in triples
 
 /* shader parameter locations */
-var vPosAttribLoc; // where to put position for vertex shader
-var pvmMatrixULoc; // where to put project model view matrix for vertex shader
-var diffuseULoc;
+var colorULoc;
 
 // ASSIGNMENT HELPER FUNCTIONS
 
@@ -56,11 +53,6 @@ function handleKeyDown(event) {
     
     const modelEnum = {TRIANGLES: "triangles", ELLIPSOID: "ellipsoid"}; // enumerated model type
     const dirEnum = {NEGATIVE: -1, POSITIVE: 1}; // enumerated rotation direction
-    
-    // set up needed view params
-    var lookAt = vec3.create(), viewRight = vec3.create(), temp = vec3.create(); // lookat, right & temp vectors
-    lookAt = vec3.normalize(lookAt,vec3.subtract(temp,Center,Eye)); // get lookat vector
-    viewRight = vec3.normalize(viewRight,vec3.cross(temp,lookAt,Up)); // get view right vector
     
     switch (event.code) {
         // view change
@@ -112,36 +104,23 @@ function loadModels() {
             var whichSetTri; // index of triangle in current triangle set
             var vtxToAdd; // vtx coords to add to the coord array
             var triToAdd; // tri indices to add to the index array
-            var maxCorner = vec3.fromValues(Number.MIN_VALUE,Number.MIN_VALUE,Number.MIN_VALUE); // bbox corner
-            var minCorner = vec3.fromValues(Number.MAX_VALUE,Number.MAX_VALUE,Number.MAX_VALUE); // other corner
-        
             // process each triangle set to load webgl vertex and triangle buffers
             numTriangleSets = inputTriangles.length; // remember how many tri sets
             for (var whichSet=0; whichSet<numTriangleSets; whichSet++) { // for each tri set
-                
-                // set up hilighting, modeling translation and rotation
-                inputTriangles[whichSet].center = vec3.fromValues(0,0,0);  // center point of tri set
-                inputTriangles[whichSet].translation = vec3.fromValues(0,0,0); // no translation
-                inputTriangles[whichSet].xAxis = vec3.fromValues(1,0,0); // model X axis
-                inputTriangles[whichSet].yAxis = vec3.fromValues(0,1,0); // model Y axis 
 
-                // set up the vertex array, define model center and axes
+                // set up the vertex array
                 inputTriangles[whichSet].glVertices = []; // flat coord list for webgl
                 var numVerts = inputTriangles[whichSet].vertices.length; // num vertices in tri set
                 for (whichSetVert=0; whichSetVert<numVerts; whichSetVert++) { // verts in set
                     vtxToAdd = inputTriangles[whichSet].vertices[whichSetVert]; // get vertex to add
-                    inputTriangles[whichSet].glVertices.push(vtxToAdd[0],vtxToAdd[1],vtxToAdd[2]); // put coords in set coord list
-                    vec3.max(maxCorner,maxCorner,vtxToAdd); // update world bounding box corner maxima
-                    vec3.min(minCorner,minCorner,vtxToAdd); // update world bounding box corner minima
-                    vec3.add(inputTriangles[whichSet].center,inputTriangles[whichSet].center,vtxToAdd); // add to ctr sum
+                    inputTriangles[whichSet].glVertices.push(Math.abs(1 - vtxToAdd[0]),vtxToAdd[1],vtxToAdd[2]); // put coords in set coord list
                 } // end for vertices in set
-                vec3.scale(inputTriangles[whichSet].center,inputTriangles[whichSet].center,1/numVerts); // avg ctr sum
 
                 // send the vertex coords to webGL
                 vertexBuffers[whichSet] = gl.createBuffer(); // init empty webgl set vertex coord buffer
                 gl.bindBuffer(gl.ARRAY_BUFFER,vertexBuffers[whichSet]); // activate that buffer
                 gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(inputTriangles[whichSet].glVertices),gl.STATIC_DRAW); // data in
-                
+
                 // set up the triangle index array, adjusting indices across sets
                 inputTriangles[whichSet].glTriangles = []; // flat index list for webgl
                 triSetSizes[whichSet] = inputTriangles[whichSet].triangles.length; // number of tris in this set
@@ -154,7 +133,7 @@ function loadModels() {
                 triangleBuffers.push(gl.createBuffer()); // init empty triangle index buffer
                 gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, triangleBuffers[whichSet]); // activate that buffer
                 gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array(inputTriangles[whichSet].glTriangles),gl.STATIC_DRAW); // data in
-
+ 
             } // end for each triangle set
 		} // end if file loaded
     } // end try 
@@ -170,22 +149,20 @@ function setupShaders() {
     // define vertex shader in essl using es6 template strings
     var vShaderCode = `
         attribute vec3 aVertexPosition; // vertex position
-        
-        uniform mat4 upvmMatrix; // the project view model matrix
-
+		
+		
         void main(void) {
-            gl_Position = upvmMatrix * vec4(aVertexPosition.x, aVertexPosition.y, 0, 1.0);
+            gl_Position = vec4(aVertexPosition, 1.0);
         }
     `;
     
     // define fragment shader in essl using es6 template strings
     var fShaderCode = `
-        precision mediump float; // set float to medium precision
-        
-        uniform vec3 uDiffuse; // the diffuse reflectivity
+		precision mediump float;
+        uniform vec3 uColor; // the diffuse reflectivity
             
         void main(void) {
-            gl_FragColor = vec4(uDiffuse, 1.0); 
+            gl_FragColor = vec4(uColor, 1.0); 
         }
     `;
     
@@ -218,12 +195,8 @@ function setupShaders() {
                 // locate and enable vertex attributes
                 vPosAttribLoc = gl.getAttribLocation(shaderProgram, "aVertexPosition"); // ptr to vertex pos attrib
                 gl.enableVertexAttribArray(vPosAttribLoc); // connect attrib to array
-
-                // locate vertex uniforms
-                pvmMatrixULoc = gl.getUniformLocation(shaderProgram, "upvmMatrix"); // ptr to pvmmat
-                
-                // locate fragment uniforms
-                diffuseULoc = gl.getUniformLocation(shaderProgram, "uDiffuse"); // ptr to diffuse
+				
+                colorULoc = gl.getUniformLocation(shaderProgram, "uColor"); // ptr to diffuse
             } // end if no shader program link errors
         } // end if no compile errors
     } // end try 
@@ -233,72 +206,35 @@ function setupShaders() {
     } // end catch
 } // end setup shaders
 
+var fps = 2;
+var b = 0;
+
 // render the loaded model
 function renderModels() {
-    
-    // construct the model transform matrix, based on model state
-    function makeModelTransform(currModel) {
-        var zAxis = vec3.create(), sumRotation = mat4.create(), temp = mat4.create(), negCtr = vec3.create();
-
-        // move the model to the origin
-        mat4.fromTranslation(mMatrix,vec3.negate(negCtr,currModel.center)); 
-        
-        // rotate the model to current interactive orientation
-        vec3.normalize(zAxis,vec3.cross(zAxis,currModel.xAxis,currModel.yAxis)); // get the new model z axis
-        mat4.set(sumRotation, // get the composite rotation
-            currModel.xAxis[0], currModel.yAxis[0], zAxis[0], 0,
-            currModel.xAxis[1], currModel.yAxis[1], zAxis[1], 0,
-            currModel.xAxis[2], currModel.yAxis[2], zAxis[2], 0,
-            0, 0,  0, 1);
-        mat4.multiply(mMatrix,sumRotation,mMatrix); // R(ax) * S(1.2) * T(-ctr)
-        
-        // translate back to model center
-        mat4.multiply(mMatrix,mat4.fromTranslation(temp,currModel.center),mMatrix); // T(ctr) * R(ax) * S(1.2) * T(-ctr)
-
-        // translate model to current interactive orientation
-        mat4.multiply(mMatrix,mat4.fromTranslation(temp,currModel.translation),mMatrix); // T(pos)*T(ctr)*R(ax)*S(1.2)*T(-ctr)
-        
-    } // end make model transform
-    
-    var pMatrix = mat4.create(); // projection matrix
-    var vMatrix = mat4.create(); // view matrix
-    var mMatrix = mat4.create(); // model matrix
-    var pvMatrix = mat4.create(); // proj * view matrices
-    var pvmMatrix = mat4.create(); // proj * view * model matrices
-    
-    window.requestAnimationFrame(renderModels); // set up frame render callback
-    
-    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); // clear frame/depth buffers
-    
-    // set up projection and view
-    mat4.perspective(pMatrix,0.5*Math.PI,1,0.1,10); // create projection matrix
-    mat4.lookAt(vMatrix,Eye,Center,Up); // create view matrix
-    mat4.multiply(pvMatrix,pvMatrix,pMatrix); // projection
-    mat4.multiply(pvMatrix,pvMatrix,vMatrix); // projection * view
-
-    // render each triangle set
-    var currSet; // the tri set and its properties
-    for (var whichTriSet=0; whichTriSet<numTriangleSets; whichTriSet++) {
-        currSet = inputTriangles[whichTriSet];
-        
-        // make model transform, add to view project
-        makeModelTransform(currSet);
-        mat4.multiply(pvmMatrix,pvMatrix,mMatrix); // project * view * model
-        gl.uniformMatrix4fv(pvmMatrixULoc, false, pvmMatrix); // pass in the hpvm matrix
-        
-        // reflectivity: feed to the fragment shader
+	
+	setTimeout(function() {
+		window.requestAnimationFrame(renderModels); // set up frame render callback
 		
-        gl.uniform3fv(diffuseULoc,vec3.create(currSet.diffuse)); // pass in the diffuse reflectivity
-
-        // vertex buffer: activate and feed into vertex shader
-        gl.bindBuffer(gl.ARRAY_BUFFER,vertexBuffers[whichTriSet]); // activate
-        gl.vertexAttribPointer(vPosAttribLoc,3,gl.FLOAT,false,0,0); // feed
+		gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); // clear frame/depth buffers
 		
-        // triangle buffer: activate and render
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,triangleBuffers[whichTriSet]); // activate
-        gl.drawElements(gl.TRIANGLES,3*triSetSizes[whichTriSet],gl.UNSIGNED_SHORT,0); // render
-        
-    } // end for each triangle set
+		// render each triangle set
+		var currSet; // the tri set and its properties
+		for (var whichTriSet=0; whichTriSet<numTriangleSets; whichTriSet++) {
+			currSet = inputTriangles[whichTriSet];
+			b += 15;
+			
+			gl.uniform3fv(colorULoc,vec3.clone(currSet.diffuse)); // pass in the diffuse reflectivity
+
+			// vertex buffer: activate and feed into vertex shader
+			gl.bindBuffer(gl.ARRAY_BUFFER,vertexBuffers[whichTriSet]); // activate
+			gl.vertexAttribPointer(vPosAttribLoc,3,gl.FLOAT,false,0,0); // feed
+			
+			// triangle buffer: activate and render
+			gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,triangleBuffers[whichTriSet]); // activate
+			gl.drawElements(gl.TRIANGLES,3*triSetSizes[whichTriSet],gl.UNSIGNED_SHORT,0); // render
+			
+		} // end for each triangle set
+	}, 1000 / fps);
 } // end render model
 
 
