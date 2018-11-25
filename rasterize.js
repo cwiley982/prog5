@@ -3,6 +3,7 @@
 /* assignment specific globals */
 const INPUT_SNAKE_URL = "https://cwiley982.github.io/prog5/sections.json"; // snake file
 const INPUT_BORDER_URL = "https://cwiley982.github.io/prog5/border.json";
+const SNAKE_COLOR = vec3.clone([0.24,0.47,0.85]);
 var Eye = vec3.fromValues(0,0,-5); // default eye position in world space
 var Center = vec3.fromValues(0,0,0); // default view direction in world space
 var Up = vec3.fromValues(0,1,0); // default view up vector
@@ -58,15 +59,60 @@ function handleKeyDown(event) {
     switch (event.code) {
         // view change
         case "KeyA": // turn left
+			snake[0].direction = "LEFT";
             break;
-        case "KeyD": // tturn right
+        case "KeyD": // turn right
+			snake[0].direction = "RIGHT";
 			break;
         case "KeyS": // turn down
+			snake[0].direction = "DOWN";
             break;
         case "KeyW": // turn up
+			snake[0].direction = "UP";
 			break;
     } // end switch
 } // end handleKeyDown
+
+// move each section of the snake in the correct direction
+function moveSnake() {
+	for (var i = 0; i < snake.length; i++) {
+		// move sections
+		switch (snake[i].direction) {
+			case "UP":
+				for (var j = 0; j < 4; j++) {
+					snake[i].glVertices[j * 3 + 1] += 0.1;
+				}
+				break;
+			case "DOWN":
+				for (var j = 0; j < 4; j++) {
+					snake[i].glVertices[j * 3 + 1] -= 0.1;
+				}
+				break;
+			case "LEFT":
+				for (var j = 0; j < 4; j++) {
+					snake[i].glVertices[j * 3] -= 0.1;
+				}
+				break;
+			case "RIGHT":
+				for (var j = 0; j < 4; j++) {
+					snake[i].glVertices[j * 3] += 0.1;
+				}
+				break;
+		}
+		
+		// send the vertex coords to webGL
+		vertexBuffers[i] = gl.createBuffer(); // init empty webgl set vertex coord buffer
+		gl.bindBuffer(gl.ARRAY_BUFFER,vertexBuffers[i]); // activate that buffer
+		gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(snake[i].glVertices),gl.STATIC_DRAW); // data in
+
+		// update direction
+		if (i != 0) { // first one isn't following anything
+			if (snake[i-1].direction != snake[i].direction) {
+				snake[i].direction = snake[i-1].direction;
+			}
+		}
+	}
+}
 
 // set up the webGL environment
 function setupWebGL() {
@@ -113,7 +159,7 @@ function loadModels() {
                 var numVerts = snake[whichSet].vertices.length; // num vertices in tri set
                 for (whichSetVert=0; whichSetVert<numVerts; whichSetVert++) { // verts in set
                     vtxToAdd = snake[whichSet].vertices[whichSetVert]; // get vertex to add
-                    snake[whichSet].glVertices.push(Math.abs(1 - vtxToAdd[0]),vtxToAdd[1],vtxToAdd[2]); // put coords in set coord list
+                    snake[whichSet].glVertices.push(vtxToAdd[0],vtxToAdd[1],vtxToAdd[2]); // put coords in set coord list
                 } // end for vertices in set
 
                 // send the vertex coords to webGL
@@ -206,8 +252,7 @@ function setupShaders() {
     } // end catch
 } // end setup shaders
 
-var fps = 2;
-var b = 0;
+var fps = 8;
 
 // render the loaded model
 function renderModels() {
@@ -222,9 +267,8 @@ function renderModels() {
 		var currSet; // the tri set and its properties
 		for (var whichTriSet=0; whichTriSet<numTriangleSets; whichTriSet++) {
 			currSet = snake[whichTriSet];
-			b += 15;
 			
-			gl.uniform3fv(colorULoc,vec3.clone(currSet.diffuse)); // pass in the diffuse reflectivity
+			gl.uniform3fv(colorULoc,SNAKE_COLOR); // pass in the diffuse reflectivity
 
 			// vertex buffer: activate and feed into vertex shader
 			gl.bindBuffer(gl.ARRAY_BUFFER,vertexBuffers[whichTriSet]); // activate
@@ -235,9 +279,10 @@ function renderModels() {
 			gl.drawElements(gl.TRIANGLES,3*triSetSizes[whichTriSet],gl.UNSIGNED_SHORT,0); // render
 			
 		} // end for each triangle set
+		
+		moveSnake();
 	}, 1000 / fps);
 } // end render model
-
 
 /* MAIN -- HERE is where execution begins after window load */
 
