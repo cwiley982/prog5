@@ -104,12 +104,11 @@ function moveSnake() {
 		vertexBuffers[i] = gl.createBuffer(); // init empty webgl set vertex coord buffer
 		gl.bindBuffer(gl.ARRAY_BUFFER,vertexBuffers[i]); // activate that buffer
 		gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(snake[i].glVertices),gl.STATIC_DRAW); // data in
-
-		// update direction
-		if (i != 0) { // first one isn't following anything
-			if (snake[i-1].direction != snake[i].direction) {
-				snake[i].direction = snake[i-1].direction;
-			}
+	}
+	// update direction (from back of snake)
+	for (var i = snake.length - 1; i > 0; i--) {
+		if (snake[i-1].direction != snake[i].direction) {
+			snake[i].direction = snake[i-1].direction;
 		}
 	}
 }
