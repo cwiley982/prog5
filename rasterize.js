@@ -1,11 +1,12 @@
 /* GLOBAL CONSTANTS AND VARIABLES */
 
 /* assignment specific globals */
-const INPUT_SNAKE_URL = "https://cwiley982.github.io/prog5/snakeSections.json"; // snake file
+const INPUT_SNAKE_URL = "https://cwiley982.github.io/prog5/sections.json"; // snake file
 const INPUT_BORDER_URL = "https://cwiley982.github.io/prog5/border.json";
 var Eye = vec3.fromValues(0,0,-5); // default eye position in world space
 var Center = vec3.fromValues(0,0,0); // default view direction in world space
 var Up = vec3.fromValues(0,1,0); // default view up vector
+var LEFT_EDGE = -1, RIGHT_EDGE = 1, TOP = 1, BOTTOM = 1;
 /* webgl and geometry data */
 var gl = null; // the all powerful gl object. It's all here folks!
 var snake = []; // the triangle data as loaded from input files
@@ -212,6 +213,7 @@ var b = 0;
 function renderModels() {
 	
 	setTimeout(function() {
+		gl.viewport(0,0,gl.canvas.width,gl.canvas.height);
 		window.requestAnimationFrame(renderModels); // set up frame render callback
 		
 		gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); // clear frame/depth buffers
