@@ -4,6 +4,7 @@
 const INPUT_SNAKE_URL = "https://cwiley982.github.io/prog5/snake.json"; // snake file
 const INPUT_BORDER_URL = "https://cwiley982.github.io/prog5/border.json";
 const SNAKE_COLOR = vec3.clone([0.24,0.47,0.85]);
+const BORDER_COLOR = vec3.clone([0.5, 0.5, 0.5]);
 var Eye = vec3.fromValues(0,0,-5); // default eye position in world space
 var Center = vec3.fromValues(0,0,0); // default view direction in world space
 var Up = vec3.fromValues(0,1,0); // default view up vector
@@ -12,12 +13,16 @@ var LEFT_EDGE = -1, RIGHT_EDGE = 1, TOP = 1, BOTTOM = 1;
 var gl = null; // the all powerful gl object. It's all here folks!
 var snake = []; // the triangle data as loaded from input files
 var border = [];
-var numTriangleSets = 0; // how many triangle sets in input scene
+var numSnakeTriangles = 0; // how many triangle sets in input scene
+var numBorderTriangles = 0;
 var inputEllipsoids = []; // the ellipsoid data as loaded from input files
 var numEllipsoids = 0; // how many ellipsoids in the input scene
-var vertexBuffers = []; // this contains vertex coordinate lists by set, in triples
-var triSetSizes = []; // this contains the size of each triangle set
-var triangleBuffers = []; // lists of indices into vertexBuffers by set, in triples
+var snakeVertexBuffers = []; // this contains vertex coordinate lists by set, in triples
+var snakeTriSetSizes = []; // this contains the size of each triangle set
+var snakeTriangleBuffers = []; // lists of indices into snakeVertexBuffers by set, in triples
+var borderVertexBuffers = [];
+var borderTriangleBuffers = [];
+var borderTriSetSizes = [];
 
 /* shader parameter locations */
 var colorULoc;
@@ -102,8 +107,8 @@ function moveSnake() {
 		}
 		
 		// send the vertex coords to webGL
-		vertexBuffers[i] = gl.createBuffer(); // init empty webgl set vertex coord buffer
-		gl.bindBuffer(gl.ARRAY_BUFFER,vertexBuffers[i]); // activate that buffer
+		snakeVertexBuffers[i] = gl.createBuffer(); // init empty webgl set vertex coord buffer
+		gl.bindBuffer(gl.ARRAY_BUFFER,snakeVertexBuffers[i]); // activate that buffer
 		gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(snake[i].glVertices),gl.STATIC_DRAW); // data in
 	}
 	// update direction (from back of snake)
@@ -151,8 +156,8 @@ function loadSnake() {
             var vtxToAdd; // vtx coords to add to the coord array
             var triToAdd; // tri indices to add to the index array
             // process each triangle set to load webgl vertex and triangle buffers
-            numTriangleSets = snake.length; // remember how many tri sets
-            for (var whichSet=0; whichSet<numTriangleSets; whichSet++) { // for each tri set
+            numSnakeTriangles = snake.length; // remember how many tri sets
+            for (var whichSet=0; whichSet<numSnakeTriangles; whichSet++) { // for each tri set
 
                 // set up the vertex array
                 snake[whichSet].glVertices = []; // flat coord list for webgl
@@ -163,21 +168,21 @@ function loadSnake() {
                 } // end for vertices in set
 
                 // send the vertex coords to webGL
-                vertexBuffers[whichSet] = gl.createBuffer(); // init empty webgl set vertex coord buffer
-                gl.bindBuffer(gl.ARRAY_BUFFER,vertexBuffers[whichSet]); // activate that buffer
+                snakeVertexBuffers[whichSet] = gl.createBuffer(); // init empty webgl set vertex coord buffer
+                gl.bindBuffer(gl.ARRAY_BUFFER,snakeVertexBuffers[whichSet]); // activate that buffer
                 gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(snake[whichSet].glVertices),gl.STATIC_DRAW); // data in
 
                 // set up the triangle index array, adjusting indices across sets
                 snake[whichSet].glTriangles = []; // flat index list for webgl
-                triSetSizes[whichSet] = snake[whichSet].triangles.length; // number of tris in this set
-                for (whichSetTri=0; whichSetTri<triSetSizes[whichSet]; whichSetTri++) {
+                snakeTriSetSizes[whichSet] = snake[whichSet].triangles.length; // number of tris in this set
+                for (whichSetTri=0; whichSetTri<snakeTriSetSizes[whichSet]; whichSetTri++) {
                     triToAdd = snake[whichSet].triangles[whichSetTri]; // get tri to add
                     snake[whichSet].glTriangles.push(triToAdd[0],triToAdd[1],triToAdd[2]); // put indices in set list
                 } // end for triangles in set
 
                 // send the triangle indices to webGL
-                triangleBuffers.push(gl.createBuffer()); // init empty triangle index buffer
-                gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, triangleBuffers[whichSet]); // activate that buffer
+                snakeTriangleBuffers.push(gl.createBuffer()); // init empty triangle index buffer
+                gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, snakeTriangleBuffers[whichSet]); // activate that buffer
                 gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array(snake[whichSet].glTriangles),gl.STATIC_DRAW); // data in
  
             } // end for each triangle set
@@ -203,8 +208,8 @@ function loadBorder() {
             var vtxToAdd; // vtx coords to add to the coord array
             var triToAdd; // tri indices to add to the index array
             // process each triangle set to load webgl vertex and triangle buffers
-            numTriangleSets = border.length; // remember how many tri sets
-            for (var whichSet=0; whichSet<numTriangleSets; whichSet++) { // for each tri set
+            numBorderTriangles = border.length; // remember how many tri sets
+            for (var whichSet=0; whichSet<numBorderTriangles; whichSet++) { // for each tri set
 
                 // set up the vertex array
                 border[whichSet].glVertices = []; // flat coord list for webgl
@@ -215,21 +220,21 @@ function loadBorder() {
                 } // end for vertices in set
 
                 // send the vertex coords to webGL
-                vertexBuffers[whichSet] = gl.createBuffer(); // init empty webgl set vertex coord buffer
-                gl.bindBuffer(gl.ARRAY_BUFFER,vertexBuffers[whichSet]); // activate that buffer
+                borderVertexBuffers[whichSet] = gl.createBuffer(); // init empty webgl set vertex coord buffer
+                gl.bindBuffer(gl.ARRAY_BUFFER,borderVertexBuffers[whichSet]); // activate that buffer
                 gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(border[whichSet].glVertices),gl.STATIC_DRAW); // data in
 
                 // set up the triangle index array, adjusting indices across sets
                 border[whichSet].glTriangles = []; // flat index list for webgl
-                triSetSizes[whichSet] = border[whichSet].triangles.length; // number of tris in this set
-                for (whichSetTri=0; whichSetTri<triSetSizes[whichSet]; whichSetTri++) {
+                borderTriSetSizes[whichSet] = border[whichSet].triangles.length; // number of tris in this set
+                for (whichSetTri=0; whichSetTri<snakeTriSetSizes[whichSet]; whichSetTri++) {
                     triToAdd = border[whichSet].triangles[whichSetTri]; // get tri to add
                     border[whichSet].glTriangles.push(triToAdd[0],triToAdd[1],triToAdd[2]); // put indices in set list
                 } // end for triangles in set
 
                 // send the triangle indices to webGL
-                triangleBuffers.push(gl.createBuffer()); // init empty triangle index buffer
-                gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, triangleBuffers[whichSet]); // activate that buffer
+                borderTriangleBuffers.push(gl.createBuffer()); // init empty triangle index buffer
+                gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, borderTriangleBuffers[whichSet]); // activate that buffer
                 gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array(border[whichSet].glTriangles),gl.STATIC_DRAW); // data in
  
             } // end for each triangle set
@@ -247,7 +252,6 @@ function setupShaders() {
     // define vertex shader in essl using es6 template strings
     var vShaderCode = `
         attribute vec3 aVertexPosition; // vertex position
-		
 		
         void main(void) {
             gl_Position = vec4(aVertexPosition, 1.0);
@@ -317,18 +321,33 @@ function renderModels() {
 		
 		// render each triangle set
 		var currSet; // the tri set and its properties
-		for (var whichTriSet=0; whichTriSet<numTriangleSets; whichTriSet++) {
+		for (var whichTriSet=0; whichTriSet<numSnakeTriangles; whichTriSet++) {
 			currSet = snake[whichTriSet];
 			
 			gl.uniform3fv(colorULoc,SNAKE_COLOR); // pass in the diffuse reflectivity
 
 			// vertex buffer: activate and feed into vertex shader
-			gl.bindBuffer(gl.ARRAY_BUFFER,vertexBuffers[whichTriSet]); // activate
+			gl.bindBuffer(gl.ARRAY_BUFFER,snakeVertexBuffers[whichTriSet]); // activate
 			gl.vertexAttribPointer(vPosAttribLoc,3,gl.FLOAT,false,0,0); // feed
 			
 			// triangle buffer: activate and render
-			gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,triangleBuffers[whichTriSet]); // activate
-			gl.drawElements(gl.TRIANGLES,3*triSetSizes[whichTriSet],gl.UNSIGNED_SHORT,0); // render
+			gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,snakeTriangleBuffers[whichTriSet]); // activate
+			gl.drawElements(gl.TRIANGLES,3*snakeTriSetSizes[whichTriSet],gl.UNSIGNED_SHORT,0); // render
+			
+		} // end for each triangle set
+		
+		for (var whichTriSet=0; whichTriSet<numBorderTriangles; whichTriSet++) {
+			currSet = border[whichTriSet];
+			
+			gl.uniform3fv(colorULoc,BORDER_COLOR); // pass in the diffuse reflectivity
+
+			// vertex buffer: activate and feed into vertex shader
+			gl.bindBuffer(gl.ARRAY_BUFFER,borderVertexBuffers[whichTriSet]); // activate
+			gl.vertexAttribPointer(vPosAttribLoc,3,gl.FLOAT,false,0,0); // feed
+			
+			// triangle buffer: activate and render
+			gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,borderTriangleBuffers[whichTriSet]); // activate
+			gl.drawElements(gl.TRIANGLES,3*borderTriSetSizes[whichTriSet],gl.UNSIGNED_SHORT,0); // render
 			
 		} // end for each triangle set
 		
