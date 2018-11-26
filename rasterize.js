@@ -8,7 +8,7 @@ const BORDER_COLOR = vec3.clone([0.5, 0.5, 0.5]);
 var Eye = vec3.fromValues(0,0,-5); // default eye position in world space
 var Center = vec3.fromValues(0,0,0); // default view direction in world space
 var Up = vec3.fromValues(0,1,0); // default view up vector
-var LEFT_EDGE = -1, RIGHT_EDGE = 1, TOP = 1, BOTTOM = 1;
+var LEFT_EDGE = -0.9, RIGHT_EDGE = 0.9, TOP = 0.9, BOTTOM = -0.9;
 /* webgl and geometry data */
 var gl = null; // the all powerful gl object. It's all here folks!
 var snake = []; // the triangle data as loaded from input files
@@ -227,17 +227,16 @@ function loadBorder() {
                 // set up the triangle index array, adjusting indices across sets
                 border[whichSet].glTriangles = []; // flat index list for webgl
                 borderTriSetSizes[whichSet] = border[whichSet].triangles.length; // number of tris in this set
-                for (whichSetTri=0; whichSetTri<snakeTriSetSizes[whichSet]; whichSetTri++) {
+                for (whichSetTri=0; whichSetTri<borderTriSetSizes[whichSet]; whichSetTri++) {
                     triToAdd = border[whichSet].triangles[whichSetTri]; // get tri to add
                     border[whichSet].glTriangles.push(triToAdd[0],triToAdd[1],triToAdd[2]); // put indices in set list
                 } // end for triangles in set
 
                 // send the triangle indices to webGL
-                borderTriangleBuffers.push(gl.createBuffer()); // init empty triangle index buffer
+                borderTriangleBuffers[whichSet] = gl.createBuffer(); // init empty triangle index buffer
                 gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, borderTriangleBuffers[whichSet]); // activate that buffer
                 gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array(border[whichSet].glTriangles),gl.STATIC_DRAW); // data in
- 
-            } // end for each triangle set
+             } // end for each triangle set
 		} // end if file loaded
     } // end try 
     
