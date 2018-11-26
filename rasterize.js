@@ -64,15 +64,19 @@ function handleKeyDown(event) {
     
     switch (event.code) {
         // view change
+		case "ArrowLeft":
         case "KeyA": // turn left
 			snake[0].direction = "LEFT";
             break;
+		case "ArrowRight":
         case "KeyD": // turn right
 			snake[0].direction = "RIGHT";
 			break;
+		case "ArrowDown":
         case "KeyS": // turn down
 			snake[0].direction = "DOWN";
             break;
+		case "ArrowUp":
         case "KeyW": // turn up
 			snake[0].direction = "UP";
 			break;
