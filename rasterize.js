@@ -3,12 +3,12 @@
 /* assignment specific globals */
 const INPUT_SNAKE_URL = "https://cwiley982.github.io/prog5/snake.json"; // snake file
 const INPUT_BORDER_URL = "https://cwiley982.github.io/prog5/border.json";
-const SNAKE_COLOR = vec3.clone([0.24,0.47,0.85]);
+var SNAKE_COLOR = vec3.clone([0.24,0.47,0.85]);
 const BORDER_COLOR = vec3.clone([0.5, 0.5, 0.5]);
 var Eye = vec3.fromValues(0,0,-5); // default eye position in world space
 var Center = vec3.fromValues(0,0,0); // default view direction in world space
 var Up = vec3.fromValues(0,1,0); // default view up vector
-var LEFT_EDGE = -0.9, RIGHT_EDGE = 0.9, TOP = 0.9, BOTTOM = -0.9;
+var LEFT_EDGE = -0.95, RIGHT_EDGE = 0.95, TOP = 0.95, BOTTOM = -0.95;
 /* webgl and geometry data */
 var gl = null; // the all powerful gl object. It's all here folks!
 var snake = []; // the triangle data as loaded from input files
@@ -58,67 +58,87 @@ function getJSONFile(url,descr) {
 
 // does stuff when keys are pressed
 function handleKeyDown(event) {
-    
     const modelEnum = {TRIANGLES: "triangles", ELLIPSOID: "ellipsoid"}; // enumerated model type
-    const dirEnum = {NEGATIVE: -1, POSITIVE: 1}; // enumerated rotation direction
     
     switch (event.code) {
         // view change
 		case "ArrowLeft":
         case "KeyA": // turn left
-			snake[0].direction = "LEFT";
+			if (snake[0].direction != "RIGHT") {
+				snake[0].direction = "LEFT";
+			}
             break;
 		case "ArrowRight":
         case "KeyD": // turn right
-			snake[0].direction = "RIGHT";
+			if (snake[0].direction != "LEFT") {
+				snake[0].direction = "RIGHT";
+			}
 			break;
 		case "ArrowDown":
         case "KeyS": // turn down
-			snake[0].direction = "DOWN";
+			if (snake[0].direction != "UP") {
+				snake[0].direction = "DOWN";
+			}
             break;
 		case "ArrowUp":
         case "KeyW": // turn up
-			snake[0].direction = "UP";
+			if (snake[0].direction != "DOWN") {
+				snake[0].direction = "UP";
+			}
 			break;
     } // end switch
 } // end handleKeyDown
 
+function round(number) {
+	return Math.floor(number * 100) / 100;
+}
+
 // move each section of the snake in the correct direction
 function moveSnake() {
-	for (var i = 0; i < snake.length; i++) {
-		// move sections
-		switch (snake[i].direction) {
-			case "UP":
-				for (var j = 0; j < 4; j++) {
-					snake[i].glVertices[j * 3 + 1] += 0.1;
-				}
-				break;
-			case "DOWN":
-				for (var j = 0; j < 4; j++) {
-					snake[i].glVertices[j * 3 + 1] -= 0.1;
-				}
-				break;
-			case "LEFT":
-				for (var j = 0; j < 4; j++) {
-					snake[i].glVertices[j * 3] -= 0.1;
-				}
-				break;
-			case "RIGHT":
-				for (var j = 0; j < 4; j++) {
-					snake[i].glVertices[j * 3] += 0.1;
-				}
-				break;
-		}
-		
-		// send the vertex coords to webGL
-		snakeVertexBuffers[i] = gl.createBuffer(); // init empty webgl set vertex coord buffer
-		gl.bindBuffer(gl.ARRAY_BUFFER,snakeVertexBuffers[i]); // activate that buffer
-		gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(snake[i].glVertices),gl.STATIC_DRAW); // data in
+	var verts = snake[0].glVertices;
+	console.log(verts);
+	console.log(verts[0] + " " + verts[9] + " " + verts[7] + " " + verts[4]);
+	if (verts[0] < LEFT_EDGE || verts[9] > RIGHT_EDGE || verts[7] > TOP || verts[4] < BOTTOM) {
+		SNAKE_COLOR = vec3.clone([1,0,0]);
+		move = false;
 	}
-	// update direction (from back of snake)
-	for (var i = snake.length - 1; i > 0; i--) {
-		if (snake[i-1].direction != snake[i].direction) {
-			snake[i].direction = snake[i-1].direction;
+	if (move) {
+		for (var i = 0; i < snake.length; i++) {
+			// move sections
+			switch (snake[i].direction) {
+				case "UP":
+					for (var j = 0; j < 4; j++) {
+						snake[i].glVertices[j * 3 + 1] += 0.05;
+					}
+					break;
+				case "DOWN":
+					for (var j = 0; j < 4; j++) {
+						snake[i].glVertices[j * 3 + 1] -= 0.05;
+					}
+					break;
+				case "LEFT":
+					for (var j = 0; j < 4; j++) {
+						snake[i].glVertices[j * 3] -= 0.05;
+					}
+					break;
+				case "RIGHT":
+					for (var j = 0; j < 4; j++) {
+						snake[i].glVertices[j * 3] += 0.05;
+					}
+					break;
+			}
+			
+			// send the vertex coords to webGL
+			snakeVertexBuffers[i] = gl.createBuffer(); // init empty webgl set vertex coord buffer
+			gl.bindBuffer(gl.ARRAY_BUFFER,snakeVertexBuffers[i]); // activate that buffer
+			gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(snake[i].glVertices),gl.STATIC_DRAW); // data in
+		}
+	
+		// update direction (from back of snake)
+		for (var i = snake.length - 1; i > 0; i--) {
+			if (snake[i-1].direction != snake[i].direction) {
+				snake[i].direction = snake[i-1].direction;
+			}
 		}
 	}
 }
@@ -361,7 +381,7 @@ function renderModels() {
 /* MAIN -- HERE is where execution begins after window load */
 
 function main() {
-  
+  move = true;
   setupWebGL(); // set up the webGL environment
   loadSnake(); // load in the models from tri file
   loadBorder();
