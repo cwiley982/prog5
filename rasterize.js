@@ -3,12 +3,15 @@
 /* assignment specific globals */
 const INPUT_SNAKE_URL = "https://cwiley982.github.io/prog5/snake.json"; // snake file
 const INPUT_BORDER_URL = "https://cwiley982.github.io/prog5/border.json";
+const INPUT_FOOD_URL = "https://cwiley982.github.io/prog5/food.json";
 var SNAKE_COLOR = vec3.clone([0.24,0.47,0.85]);
-const BORDER_COLOR = vec3.clone([0.5, 0.5, 0.5]);
+const BORDER_COLOR = vec3.clone([0.5,0.5,0.5]);
+const FOOD_COLOR = vec3.clone([0,1,0]);
 var Eye = vec3.fromValues(0,0,-5); // default eye position in world space
 var Center = vec3.fromValues(0,0,0); // default view direction in world space
 var Up = vec3.fromValues(0,1,0); // default view up vector
 var LEFT_EDGE = -0.95, RIGHT_EDGE = 0.95, TOP = 0.95, BOTTOM = -0.95;
+var FOOD_LOC = [];
 /* webgl and geometry data */
 var gl = null; // the all powerful gl object. It's all here folks!
 var snake = []; // the triangle data as loaded from input files
@@ -23,6 +26,9 @@ var snakeTriangleBuffers = []; // lists of indices into snakeVertexBuffers by se
 var borderVertexBuffers = [];
 var borderTriangleBuffers = [];
 var borderTriSetSizes = [];
+var foodVertexBuffers = [];
+var foodTriangleBuffers = [];
+var foodTriSetSizes = [];
 
 /* shader parameter locations */
 var colorULoc;
@@ -225,7 +231,7 @@ function loadBorder() {
 	
     try {
         if (border == String.null)
-            throw "Unable to load triangles file!";
+            throw "Unable to load border file!";
         else {
             var whichSetVert; // index of vertex in current triangle set
             var whichSetTri; // index of triangle in current triangle set
@@ -267,7 +273,58 @@ function loadBorder() {
     catch(e) {
         console.log(e);
     } // end catch
-} // end load models
+} // end load border
+
+// read models in, load them into webgl buffers
+function loadFood() {
+    
+    food = getJSONFile(INPUT_FOOD_URL, "food"); // read in the triangle data
+	
+    try {
+        if (food == String.null)
+            throw "Unable to load food file!";
+        else {
+            var whichSetVert; // index of vertex in current triangle set
+            var whichSetTri; // index of triangle in current triangle set
+            var vtxToAdd; // vtx coords to add to the coord array
+            var triToAdd; // tri indices to add to the index array
+            // process each triangle set to load webgl vertex and triangle buffers
+            numFoodTriangles = food.length; // remember how many tri sets
+            for (var whichSet=0; whichSet<numFoodTriangles; whichSet++) { // for each tri set
+
+                // set up the vertex array
+                food[whichSet].glVertices = []; // flat coord list for webgl
+                var numVerts = food[whichSet].vertices.length; // num vertices in tri set
+                for (whichSetVert=0; whichSetVert<numVerts; whichSetVert++) { // verts in set
+                    vtxToAdd = food[whichSet].vertices[whichSetVert]; // get vertex to add
+                    food[whichSet].glVertices.push(vtxToAdd[0],vtxToAdd[1],vtxToAdd[2]); // put coords in set coord list
+                } // end for vertices in set
+
+                // send the vertex coords to webGL
+                foodVertexBuffers[whichSet] = gl.createBuffer(); // init empty webgl set vertex coord buffer
+                gl.bindBuffer(gl.ARRAY_BUFFER,foodVertexBuffers[whichSet]); // activate that buffer
+                gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(food[whichSet].glVertices),gl.STATIC_DRAW); // data in
+
+                // set up the triangle index array, adjusting indices across sets
+                food[whichSet].glTriangles = []; // flat index list for webgl
+                foodTriSetSizes[whichSet] = food[whichSet].triangles.length; // number of tris in this set
+                for (whichSetTri=0; whichSetTri<foodTriSetSizes[whichSet]; whichSetTri++) {
+                    triToAdd = food[whichSet].triangles[whichSetTri]; // get tri to add
+                    food[whichSet].glTriangles.push(triToAdd[0],triToAdd[1],triToAdd[2]); // put indices in set list
+                } // end for triangles in set
+
+                // send the triangle indices to webGL
+                foodTriangleBuffers[whichSet] = gl.createBuffer(); // init empty triangle index buffer
+                gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, foodTriangleBuffers[whichSet]); // activate that buffer
+                gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array(food[whichSet].glTriangles),gl.STATIC_DRAW); // data in
+             } // end for each triangle set
+		} // end if file loaded
+    } // end try 
+    
+    catch(e) {
+        console.log(e);
+    } // end catch
+} // end load food
 
 // setup the webGL shaders
 function setupShaders() {
@@ -345,8 +402,6 @@ function renderModels() {
 		// render each triangle set
 		var currSet; // the tri set and its properties
 		for (var whichTriSet=0; whichTriSet<numSnakeTriangles; whichTriSet++) {
-			currSet = snake[whichTriSet];
-			
 			gl.uniform3fv(colorULoc,SNAKE_COLOR); // pass in the diffuse reflectivity
 
 			// vertex buffer: activate and feed into vertex shader
@@ -360,8 +415,6 @@ function renderModels() {
 		} // end for each triangle set
 		
 		for (var whichTriSet=0; whichTriSet<numBorderTriangles; whichTriSet++) {
-			currSet = border[whichTriSet];
-			
 			gl.uniform3fv(colorULoc,BORDER_COLOR); // pass in the diffuse reflectivity
 
 			// vertex buffer: activate and feed into vertex shader
@@ -374,6 +427,20 @@ function renderModels() {
 			
 		} // end for each triangle set
 		
+		for (var whichTriSet = 0; whichTriSet < 2; whichTriSet++) {
+			// render food pixel
+			gl.uniform3fv(colorULoc,FOOD_COLOR);
+			
+			// vertex buffer: activate and feed into vertex shader
+			gl.bindBuffer(gl.ARRAY_BUFFER,foodVertexBuffers[whichTriSet]); // activate
+			gl.vertexAttribPointer(vPosAttribLoc,3,gl.FLOAT,false,0,0); // feed
+			
+			// triangle buffer: activate and render
+			gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,foodTriangleBuffers[whichTriSet]); // activate
+			gl.drawElements(gl.TRIANGLES,3*foodTriSetSizes[whichTriSet],gl.UNSIGNED_SHORT,0); // render
+			
+		}
+		
 		moveSnake();
 	}, 1000 / fps);
 } // end render model
@@ -385,6 +452,7 @@ function main() {
   setupWebGL(); // set up the webGL environment
   loadSnake(); // load in the models from tri file
   loadBorder();
+  loadFood();
   setupShaders(); // setup the webGL shaders
   renderModels(); // draw the triangles using webGL
   
