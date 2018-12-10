@@ -13,7 +13,7 @@ var Up = vec3.fromValues(0,1,0); // default view up vector
 var LEFT_EDGE = -0.95, RIGHT_EDGE = 0.95, TOP = 0.95, BOTTOM = -0.95;
 var FOOD_LOC; // left, bottom, right, top
 var move = true;
-var addSection = false;
+var growSnake = false;
 /* webgl and geometry data */
 var gl = null; // the all powerful gl object. It's all here folks!
 var snake = []; // the triangle data as loaded from input files
@@ -105,43 +105,16 @@ function round(number) {
 // move each section of the snake in the correct direction
 function moveSnake() {
 	var verts = snake[0].glVertices;
-	
-	if (verts[0] < LEFT_EDGE || verts[9] > RIGHT_EDGE || verts[7] > TOP || verts[4] < BOTTOM) {
+	if (verts[0] < LEFT_EDGE || verts[9] > RIGHT_EDGE || verts[7] > TOP || verts[4] < BOTTOM || touchingSelf()) {
 		SNAKE_COLOR = vec3.clone([1,0,0]);
 		move = false;
 	}
 	if (move) {
-		// check for food
-		switch (snake[0].direction) {
-			case "UP":
-				if (round(verts[7]) == round(FOOD_LOC[1]) && round(verts[0]) == round(FOOD_LOC[0])) {
-					console.log("touching food");
-					addSection = true;
-				}
-				break;
-			case "DOWN":
-				if (round(verts[7]) == round(FOOD_LOC[3]) && round(verts[0]) == round(FOOD_LOC[0])) {
-					console.log("touching food");
-					addSection = true;
-				}
-				break;
-			case "LEFT":
-				if (round(verts[0]) == round(FOOD_LOC[0]) && round(verts[4]) == round(FOOD_LOC[1])) {
-					console.log("touching food");
-					addSection = true;
-				}
-				break;
-			case "RIGHT":
-				if (round(verts[0]) == round(FOOD_LOC[2]) && round(verts[1]) == round(FOOD_LOC[1])) {
-					console.log("touching food");
-					addSection = true;
-				}
-				break;
-		}
+		growSnake = touchingFood(verts);
 		
-		// move each section
+		// for each section
 		for (var i = 0; i < snake.length; i++) {
-			// move sections
+			// move section
 			switch (snake[i].direction) {
 				case "UP":
 					for (var j = 0; j < 4; j++) {
@@ -171,9 +144,9 @@ function moveSnake() {
 			gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(snake[i].glVertices),gl.STATIC_DRAW); // data in
 		}
 		
-		if (addSection) {
+		if (growSnake) {
 			moveFood();
-			addSection = false;
+			growSnake = false;
 			numSnakeTriangles += 1;
 			//add to end of snake based on direction of last section
 			console.log("before:");
@@ -232,6 +205,83 @@ function moveSnake() {
 			}
 		}
 	}
+}
+
+function touchingSelf() {
+	switch (snake[0].direction) {
+		case "UP":
+			// check verts 3 and 4 (2 & 3) of snake[0] against 1 and 2 (0 & 1) of rest of snake
+			var xLeft = round(snake[0].glVertices[6]);
+			var xRight = round(snake[0].glVertices[9]);
+			var y = round(snake[0].glVertices[10]);
+			for (var i = 1; i < snake.length; i++) {
+				if (round(snake[i].glVertices[0]) == xLeft && round(snake[i].glVertices[3]) == xRight && round(snake[i].glVertices[4]) == y) {
+					return true;
+				}
+			}
+			break;
+		case "DOWN":
+			// check verts 1 and 2 (0 & 1) of snake[0] against 3 and 4 (2 & 3) of rest of snake
+			var xLeft = round(snake[0].glVertices[0]);
+			var xRight = round(snake[0].glVertices[3]);
+			var y = round(snake[0].glVertices[4]);
+			for (var i = 1; i < snake.length; i++) {
+				if (round(snake[i].glVertices[6]) == xLeft && round(snake[i].glVertices[9]) == xRight && round(snake[i].glVertices[10]) == y) {
+					return true;
+				}
+			}
+			break;
+		case "LEFT":
+			// check verts 1 and 3 (0 & 2) of snake[0] against 2 and 4 (1 & 3) of rest of snake
+			var yBottom = round(snake[0].glVertices[1]);
+			var yTop = round(snake[0].glVertices[7]);
+			var x = round(snake[0].glVertices[6]);
+			for (var i = 1; i < snake.length; i++) {
+				if (round(snake[i].glVertices[4]) == yBottom && round(snake[i].glVertices[10]) == yTop && round(snake[i].glVertices[9]) == x) {
+					return true;
+				}
+			}
+			break;
+		case "RIGHT":
+			// check verts 2 and 4 (1 & 3) of snake[0] against 1 and 3 (0 & 2) of rest of snake
+			var yBottom = round(snake[0].glVertices[4]);
+			var yTop = round(snake[0].glVertices[10]);
+			var x = round(snake[0].glVertices[9]);
+			for (var i = 1; i < snake.length; i++) {
+				if (round(snake[i].glVertices[1]) == yBottom && round(snake[i].glVertices[7]) == yTop && round(snake[i].glVertices[6]) == x) {
+					return true;
+				}
+			}
+			break;
+	}
+	return false;
+}
+
+function touchingFood(verts) {
+	// check for food
+	switch (snake[0].direction) {
+		case "UP":
+			if (round(verts[7]) == round(FOOD_LOC[1]) && round(verts[0]) == round(FOOD_LOC[0])) {
+				return true;
+			}
+			break;
+		case "DOWN":
+			if (round(verts[7]) == round(FOOD_LOC[3]) && round(verts[0]) == round(FOOD_LOC[0])) {
+				return true;
+			}
+			break;
+		case "LEFT":
+			if (round(verts[0]) == round(FOOD_LOC[0]) && round(verts[4]) == round(FOOD_LOC[1])) {
+				return true;
+			}
+			break;
+		case "RIGHT":
+			if (round(verts[0]) == round(FOOD_LOC[2]) && round(verts[1]) == round(FOOD_LOC[1])) {
+				return true;
+			}
+			break;
+	}
+	return false;
 }
 
 function moveFood() {
