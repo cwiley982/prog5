@@ -11,11 +11,14 @@ var Eye = vec3.fromValues(0,0,-5); // default eye position in world space
 var Center = vec3.fromValues(0,0,0); // default view direction in world space
 var Up = vec3.fromValues(0,1,0); // default view up vector
 var LEFT_EDGE = -0.95, RIGHT_EDGE = 0.95, TOP = 0.95, BOTTOM = -0.95;
-var FOOD_LOC = [];
+var FOOD_LOC; // left, bottom, right, top
+var move = true;
+var addSection = false;
 /* webgl and geometry data */
 var gl = null; // the all powerful gl object. It's all here folks!
 var snake = []; // the triangle data as loaded from input files
 var border = [];
+var food = [];
 var numSnakeTriangles = 0; // how many triangle sets in input scene
 var numBorderTriangles = 0;
 var inputEllipsoids = []; // the ellipsoid data as loaded from input files
@@ -27,7 +30,7 @@ var borderVertexBuffers = [];
 var borderTriangleBuffers = [];
 var borderTriSetSizes = [];
 var foodVertexBuffers = [];
-var foodTriangleBuffers = [];
+var foodTriangleBuffer = [];
 var foodTriSetSizes = [];
 
 /* shader parameter locations */
@@ -96,19 +99,47 @@ function handleKeyDown(event) {
 } // end handleKeyDown
 
 function round(number) {
-	return Math.floor(number * 100) / 100;
+	return Math.round(number * 100) / 100;
 }
 
 // move each section of the snake in the correct direction
 function moveSnake() {
 	var verts = snake[0].glVertices;
-	console.log(verts);
-	console.log(verts[0] + " " + verts[9] + " " + verts[7] + " " + verts[4]);
+	
 	if (verts[0] < LEFT_EDGE || verts[9] > RIGHT_EDGE || verts[7] > TOP || verts[4] < BOTTOM) {
 		SNAKE_COLOR = vec3.clone([1,0,0]);
 		move = false;
 	}
 	if (move) {
+		// check for food
+		switch (snake[0].direction) {
+			case "UP":
+				if (round(verts[7]) == round(FOOD_LOC[1]) && round(verts[0]) == round(FOOD_LOC[0])) {
+					console.log("touching food");
+					addSection = true;
+				}
+				break;
+			case "DOWN":
+				if (round(verts[7]) == round(FOOD_LOC[3]) && round(verts[0]) == round(FOOD_LOC[0])) {
+					console.log("touching food");
+					addSection = true;
+				}
+				break;
+			case "LEFT":
+				if (round(verts[0]) == round(FOOD_LOC[0]) && round(verts[4]) == round(FOOD_LOC[1])) {
+					console.log("touching food");
+					addSection = true;
+				}
+				break;
+			case "RIGHT":
+				if (round(verts[0]) == round(FOOD_LOC[2]) && round(verts[1]) == round(FOOD_LOC[1])) {
+					console.log("touching food");
+					addSection = true;
+				}
+				break;
+		}
+		
+		// move each section
 		for (var i = 0; i < snake.length; i++) {
 			// move sections
 			switch (snake[i].direction) {
@@ -139,6 +170,60 @@ function moveSnake() {
 			gl.bindBuffer(gl.ARRAY_BUFFER,snakeVertexBuffers[i]); // activate that buffer
 			gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(snake[i].glVertices),gl.STATIC_DRAW); // data in
 		}
+		
+		if (addSection) {
+			moveFood();
+			addSection = false;
+			numSnakeTriangles += 1;
+			//add to end of snake based on direction of last section
+			console.log("before:");
+			console.log(snake);
+			snake.push({}); // add new section
+			
+			var length = snake.length;
+			// copy over CURRENT vertices from section before new one
+			snake[length - 1].glVertices = snake[length - 2].glVertices.slice();
+			snakeTriSetSizes[length - 1] = 2;
+			
+			var direction = snake[length - 2].direction;
+			switch (direction) { // update vertices here
+				case "UP": // add below it
+					for (var i = 0; i < 4; i++) {
+						snake[length - 1].glVertices[i * 3 + 1] = snake[length - 1].glVertices[i * 3 + 1] - 0.05;
+					}
+					break;
+				case "DOWN": // add above it
+					for (var i = 0; i < 4; i++) {
+						snake[length - 1].glVertices[i * 3 + 1] = snake[length - 1].glVertices[i * 3 + 1] + 0.05;
+					}
+					break;
+				case "LEFT": // add to right of it
+					for (var i = 0; i < 4; i++) {
+						snake[length - 1].glVertices[i * 3] = snake[length - 1].glVertices[i * 3] + 0.05;
+					}
+					break;
+				case "RIGHT": // add to left of it
+					for (var i = 0; i < 4; i++) {
+					snake[length - 1].glVertices[i * 3] = snake[length - 1].glVertices[i * 3] - 0.05;
+					}
+					break;
+			}
+			snake[length - 1].direction = direction;
+			
+			console.log("with new section updated:");
+			console.log(snake);
+			// send the vertex coords to webGL
+			snakeVertexBuffers.push(gl.createBuffer()); // init empty webgl set vertex coord buffer
+			gl.bindBuffer(gl.ARRAY_BUFFER,snakeVertexBuffers[length - 1]); // activate that buffer
+			gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(snake[length - 1].glVertices),gl.STATIC_DRAW); // data in
+		
+			snake[length - 1].glTriangles = [0, 1, 3, 0, 2, 3];
+			
+			// send the vertex coords to webGL
+			snakeTriangleBuffers.push(gl.createBuffer()); // init empty webgl set vertex coord buffer
+			gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,snakeTriangleBuffers[length - 1]); // activate that buffer
+			gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array(snake[length - 1].glTriangles),gl.STATIC_DRAW); // data in
+		}
 	
 		// update direction (from back of snake)
 		for (var i = snake.length - 1; i > 0; i--) {
@@ -147,6 +232,36 @@ function moveSnake() {
 			}
 		}
 	}
+}
+
+function moveFood() {
+	var xVal = Math.floor(Math.random() * 28);
+	var yVal = Math.floor(Math.random() * 28);
+	
+	var left = (xVal * 0.05) - 0.95;
+	var right = (left + 0.05);
+	var bottom = (yVal * 0.05) - 0.95;
+	var top = (bottom + 0.05);
+	
+	FOOD_LOC = [left, bottom, right, top];
+	console.log(FOOD_LOC);
+	food.glVertices = [];
+	food.glVertices.push(left, bottom,0); // new bottom left coord
+	food.glVertices.push(right,bottom,0); // new bottom right coord
+	food.glVertices.push(left,top,0); // new top left coord
+	food.glVertices.push(right,top,0); // new top right coord
+	
+	// send the vertex coords to webGL
+	foodVertexBuffer = gl.createBuffer(); // init empty webgl set vertex coord buffer
+	gl.bindBuffer(gl.ARRAY_BUFFER,foodVertexBuffer); // activate that buffer
+	gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(food.glVertices),gl.STATIC_DRAW); // data in
+	
+	food.glTriangles = [0, 1, 3, 0, 2, 3];
+	
+	// send the vertex coords to webGL
+	foodTriangleBuffer = gl.createBuffer(); // init empty webgl set vertex coord buffer
+	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,foodTriangleBuffer); // activate that buffer
+	gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array(food.glTriangles),gl.STATIC_DRAW); // data in
 }
 
 // set up the webGL environment
@@ -275,57 +390,6 @@ function loadBorder() {
     } // end catch
 } // end load border
 
-// read models in, load them into webgl buffers
-function loadFood() {
-    
-    food = getJSONFile(INPUT_FOOD_URL, "food"); // read in the triangle data
-	
-    try {
-        if (food == String.null)
-            throw "Unable to load food file!";
-        else {
-            var whichSetVert; // index of vertex in current triangle set
-            var whichSetTri; // index of triangle in current triangle set
-            var vtxToAdd; // vtx coords to add to the coord array
-            var triToAdd; // tri indices to add to the index array
-            // process each triangle set to load webgl vertex and triangle buffers
-            numFoodTriangles = food.length; // remember how many tri sets
-            for (var whichSet=0; whichSet<numFoodTriangles; whichSet++) { // for each tri set
-
-                // set up the vertex array
-                food[whichSet].glVertices = []; // flat coord list for webgl
-                var numVerts = food[whichSet].vertices.length; // num vertices in tri set
-                for (whichSetVert=0; whichSetVert<numVerts; whichSetVert++) { // verts in set
-                    vtxToAdd = food[whichSet].vertices[whichSetVert]; // get vertex to add
-                    food[whichSet].glVertices.push(vtxToAdd[0],vtxToAdd[1],vtxToAdd[2]); // put coords in set coord list
-                } // end for vertices in set
-
-                // send the vertex coords to webGL
-                foodVertexBuffers[whichSet] = gl.createBuffer(); // init empty webgl set vertex coord buffer
-                gl.bindBuffer(gl.ARRAY_BUFFER,foodVertexBuffers[whichSet]); // activate that buffer
-                gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(food[whichSet].glVertices),gl.STATIC_DRAW); // data in
-
-                // set up the triangle index array, adjusting indices across sets
-                food[whichSet].glTriangles = []; // flat index list for webgl
-                foodTriSetSizes[whichSet] = food[whichSet].triangles.length; // number of tris in this set
-                for (whichSetTri=0; whichSetTri<foodTriSetSizes[whichSet]; whichSetTri++) {
-                    triToAdd = food[whichSet].triangles[whichSetTri]; // get tri to add
-                    food[whichSet].glTriangles.push(triToAdd[0],triToAdd[1],triToAdd[2]); // put indices in set list
-                } // end for triangles in set
-
-                // send the triangle indices to webGL
-                foodTriangleBuffers[whichSet] = gl.createBuffer(); // init empty triangle index buffer
-                gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, foodTriangleBuffers[whichSet]); // activate that buffer
-                gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array(food[whichSet].glTriangles),gl.STATIC_DRAW); // data in
-             } // end for each triangle set
-		} // end if file loaded
-    } // end try 
-    
-    catch(e) {
-        console.log(e);
-    } // end catch
-} // end load food
-
 // setup the webGL shaders
 function setupShaders() {
     
@@ -400,7 +464,6 @@ function renderModels() {
 		gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); // clear frame/depth buffers
 		
 		// render each triangle set
-		var currSet; // the tri set and its properties
 		for (var whichTriSet=0; whichTriSet<numSnakeTriangles; whichTriSet++) {
 			gl.uniform3fv(colorULoc,SNAKE_COLOR); // pass in the diffuse reflectivity
 
@@ -427,19 +490,16 @@ function renderModels() {
 			
 		} // end for each triangle set
 		
-		for (var whichTriSet = 0; whichTriSet < 2; whichTriSet++) {
-			// render food pixel
-			gl.uniform3fv(colorULoc,FOOD_COLOR);
-			
-			// vertex buffer: activate and feed into vertex shader
-			gl.bindBuffer(gl.ARRAY_BUFFER,foodVertexBuffers[whichTriSet]); // activate
-			gl.vertexAttribPointer(vPosAttribLoc,3,gl.FLOAT,false,0,0); // feed
-			
-			// triangle buffer: activate and render
-			gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,foodTriangleBuffers[whichTriSet]); // activate
-			gl.drawElements(gl.TRIANGLES,3*foodTriSetSizes[whichTriSet],gl.UNSIGNED_SHORT,0); // render
-			
-		}
+		// render food pixel
+		gl.uniform3fv(colorULoc,FOOD_COLOR);
+		
+		// vertex buffer: activate and feed into vertex shader
+		gl.bindBuffer(gl.ARRAY_BUFFER,foodVertexBuffer); // activate
+		gl.vertexAttribPointer(vPosAttribLoc,3,gl.FLOAT,false,0,0); // feed
+		
+		// triangle buffer: activate and render
+		gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,foodTriangleBuffer); // activate
+		gl.drawElements(gl.TRIANGLES,3*2,gl.UNSIGNED_SHORT,0); // render
 		
 		moveSnake();
 	}, 1000 / fps);
@@ -448,12 +508,10 @@ function renderModels() {
 /* MAIN -- HERE is where execution begins after window load */
 
 function main() {
-  move = true;
-  setupWebGL(); // set up the webGL environment
-  loadSnake(); // load in the models from tri file
-  loadBorder();
-  loadFood();
-  setupShaders(); // setup the webGL shaders
-  renderModels(); // draw the triangles using webGL
-  
+	setupWebGL(); // set up the webGL environment
+	loadSnake(); // load in the models from tri file
+	loadBorder();
+	moveFood();
+	setupShaders(); // setup the webGL shaders
+	renderModels(); // draw the triangles using webGL
 } // end main
