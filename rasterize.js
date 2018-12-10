@@ -12,7 +12,7 @@ var Center = vec3.fromValues(0,0,0); // default view direction in world space
 var Up = vec3.fromValues(0,1,0); // default view up vector
 var LEFT_EDGE = -0.95, RIGHT_EDGE = 0.95, TOP = 0.95, BOTTOM = -0.95;
 var FOOD_LOC; // left, bottom, right, top
-var move = true;
+var move;
 var growSnake = false;
 /* webgl and geometry data */
 var gl = null; // the all powerful gl object. It's all here folks!
@@ -108,6 +108,9 @@ function moveSnake() {
 	if (verts[0] < LEFT_EDGE || verts[9] > RIGHT_EDGE || verts[7] > TOP || verts[4] < BOTTOM || touchingSelf()) {
 		SNAKE_COLOR = vec3.clone([1,0,0]);
 		move = false;
+		setTimeout(function() {
+			loadSnake();
+		}, 1000);
 	}
 	if (move) {
 		growSnake = touchingFood(verts);
@@ -381,6 +384,9 @@ function loadSnake() {
                 gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array(snake[whichSet].glTriangles),gl.STATIC_DRAW); // data in
  
             } // end for each triangle set
+			
+			SNAKE_COLOR = vec3.clone([0.24,0.47,0.85]);
+			move = true;
 		} // end if file loaded
     } // end try 
     
