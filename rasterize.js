@@ -235,8 +235,8 @@ function moveSnake() {
 }
 
 function moveFood() {
-	var xVal = Math.floor(Math.random() * 28);
-	var yVal = Math.floor(Math.random() * 28);
+	var xVal = Math.floor(Math.random() * 38);
+	var yVal = Math.floor(Math.random() * 38);
 	
 	var left = (xVal * 0.05) - 0.95;
 	var right = (left + 0.05);
