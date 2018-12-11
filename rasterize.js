@@ -5,6 +5,7 @@ const INPUT_SNAKE_URL = "https://cwiley982.github.io/prog5/snake.json"; // snake
 const INPUT_BORDER_URL = "https://cwiley982.github.io/prog5/border.json";
 const INPUT_FOOD_URL = "https://cwiley982.github.io/prog5/food.json";
 var SNAKE_COLOR = vec3.clone([0.24,0.47,0.85]);
+var BAD_SNAKE_COLOR = vec3.clone([1,0,0]);
 const BORDER_COLOR = vec3.clone([0.5,0.5,0.5]);
 const FOOD_COLOR = vec3.clone([0,1,0]);
 var Eye = vec3.fromValues(0,0,-5); // default eye position in world space
@@ -13,14 +14,18 @@ var Up = vec3.fromValues(0,1,0); // default view up vector
 var LEFT_EDGE = -0.95, RIGHT_EDGE = 0.95, TOP = 0.95, BOTTOM = -0.95;
 var FOOD_LOC; // left, bottom, right, top
 var move;
+var moveComp;
 var growSnake = false;
+var growCompSnake = false;
 /* webgl and geometry data */
 var gl = null; // the all powerful gl object. It's all here folks!
 var snake = []; // the triangle data as loaded from input files
+var compSnake = [];
 var border = [];
 var food = [];
 var numSnakeTriangles = 0; // how many triangle sets in input scene
 var numBorderTriangles = 0;
+var numCompSnakeTriangles = 0;
 var inputEllipsoids = []; // the ellipsoid data as loaded from input files
 var numEllipsoids = 0; // how many ellipsoids in the input scene
 var snakeVertexBuffers = []; // this contains vertex coordinate lists by set, in triples
@@ -32,6 +37,9 @@ var borderTriSetSizes = [];
 var foodVertexBuffers = [];
 var foodTriangleBuffer = [];
 var foodTriSetSizes = [];
+var compSnakeVertexBuffers = [];
+var compSnakeTriangleBuffers = [];
+var compSnakeTriSetSizes = [];
 
 /* shader parameter locations */
 var colorULoc;
@@ -105,7 +113,11 @@ function round(number) {
 // move each section of the snake in the correct direction
 function moveSnake() {
 	var verts = snake[0].glVertices;
-	if (verts[0] < LEFT_EDGE || verts[9] > RIGHT_EDGE || verts[7] > TOP || verts[4] < BOTTOM || touchingSelf()) {
+	if (((round(verts[0]) == LEFT_EDGE && snake[0].direction == "LEFT")
+		|| (round(verts[9]) == RIGHT_EDGE && snake[0].direction == "RIGHT")
+		|| (round(verts[7]) == TOP && snake[0].direction == "UP")
+		|| (round(verts[4]) == BOTTOM  && snake[0].direction == "DOWN")
+		|| touchingSelf() || touchingCompSnake()) && move) {
 		SNAKE_COLOR = vec3.clone([1,0,0]);
 		move = false;
 		setTimeout(function() {
@@ -152,8 +164,6 @@ function moveSnake() {
 			growSnake = false;
 			numSnakeTriangles += 1;
 			//add to end of snake based on direction of last section
-			console.log("before:");
-			console.log(snake);
 			snake.push({}); // add new section
 			
 			var length = snake.length;
@@ -186,8 +196,6 @@ function moveSnake() {
 			}
 			snake[length - 1].direction = direction;
 			
-			console.log("with new section updated:");
-			console.log(snake);
 			// send the vertex coords to webGL
 			snakeVertexBuffers.push(gl.createBuffer()); // init empty webgl set vertex coord buffer
 			gl.bindBuffer(gl.ARRAY_BUFFER,snakeVertexBuffers[length - 1]); // activate that buffer
@@ -207,6 +215,220 @@ function moveSnake() {
 				snake[i].direction = snake[i-1].direction;
 			}
 		}
+	}
+}
+
+function growComputerSnake() {
+	growCompSnake = false;
+	numCompSnakeTriangles += 1;
+	//add to end of snake based on direction of last section
+	compSnake.push({}); // add new section
+	
+	var length = compSnake.length;
+	// copy over CURRENT vertices from section before new one
+	compSnake[length - 1].glVertices = compSnake[length - 2].glVertices.slice();
+	compSnakeTriSetSizes[length - 1] = 2;
+	
+	var direction = compSnake[length - 2].direction;
+	switch (direction) { // update vertices here
+		case "UP": // add below it
+			for (var i = 0; i < 4; i++) {
+				compSnake[length - 1].glVertices[i * 3 + 1] = compSnake[length - 1].glVertices[i * 3 + 1] - 0.05;
+			}
+			break;
+		case "DOWN": // add above it
+			for (var i = 0; i < 4; i++) {
+				compSnake[length - 1].glVertices[i * 3 + 1] = compSnake[length - 1].glVertices[i * 3 + 1] + 0.05;
+			}
+			break;
+		case "LEFT": // add to right of it
+			for (var i = 0; i < 4; i++) {
+				compSnake[length - 1].glVertices[i * 3] = compSnake[length - 1].glVertices[i * 3] + 0.05;
+			}
+			break;
+		case "RIGHT": // add to left of it
+			for (var i = 0; i < 4; i++) {
+			compSnake[length - 1].glVertices[i * 3] = compSnake[length - 1].glVertices[i * 3] - 0.05;
+			}
+			break;
+	}
+	compSnake[length - 1].direction = direction;
+	
+	// send the vertex coords to webGL
+	compSnakeVertexBuffers.push(gl.createBuffer()); // init empty webgl set vertex coord buffer
+	gl.bindBuffer(gl.ARRAY_BUFFER,compSnakeVertexBuffers[length - 1]); // activate that buffer
+	gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(compSnake[length - 1].glVertices),gl.STATIC_DRAW); // data in
+
+	compSnake[length - 1].glTriangles = [0, 1, 3, 0, 2, 3];
+	
+	// send the vertex coords to webGL
+	compSnakeTriangleBuffers.push(gl.createBuffer()); // init empty webgl set vertex coord buffer
+	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,compSnakeTriangleBuffers[length - 1]); // activate that buffer
+	gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array(compSnake[length - 1].glTriangles),gl.STATIC_DRAW); // data in
+}
+
+function createCompSnake() {
+	compSnake = [];
+	BAD_SNAKE_COLOR = vec3.clone([1,0,0]);
+	// create first section
+	var xVal = Math.floor(Math.random() * 38);
+	var yVal = Math.floor(Math.random() * 38);
+	
+	var left = (xVal * 0.05) - 0.95;
+	var right = (left + 0.05);
+	var bottom = (yVal * 0.05) - 0.95;
+	var top = (bottom + 0.05);
+
+	compSnake.push({});
+	compSnake[0].glVertices = [];
+	compSnake[0].glVertices.push(left, bottom,0); // new bottom left coord
+	compSnake[0].glVertices.push(right,bottom,0); // new bottom right coord
+	compSnake[0].glVertices.push(left,top,0); // new top left coord
+	compSnake[0].glVertices.push(right,top,0); // new top right coord
+	
+	// send the vertex coords to webGL
+	compSnakeVertexBuffers[0] = gl.createBuffer(); // init empty webgl set vertex coord buffer
+	gl.bindBuffer(gl.ARRAY_BUFFER,compSnakeVertexBuffers[0]); // activate that buffer
+	gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(compSnake[0].glVertices),gl.STATIC_DRAW); // data in
+	
+	compSnake[0].glTriangles = [0, 1, 3, 0, 2, 3];
+	
+	// send the vertex coords to webGL
+	compSnakeTriangleBuffers[0] = gl.createBuffer(); // init empty webgl set vertex coord buffer
+	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,compSnakeTriangleBuffers[0]); // activate that buffer
+	gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array(compSnake[0].glTriangles),gl.STATIC_DRAW); // data in
+	
+	compSnake[0].direction = randomDirection(null);
+	compSnakeTriSetSizes[0] = 2;
+	numCompSnakeTriangles = 1;
+	
+	//make it 4 long to start
+	growComputerSnake();
+	growComputerSnake();
+	growComputerSnake();
+	
+	moveComp = true;
+}
+
+function moveCompSnake() {
+	var verts = compSnake[0].glVertices;
+	if (((round(verts[0]) == LEFT_EDGE && compSnake[0].direction == "LEFT")
+		|| (round(verts[9]) == RIGHT_EDGE && compSnake[0].direction == "RIGHT")
+		|| (round(verts[7]) == TOP && compSnake[0].direction == "UP")
+		|| (round(verts[4]) == BOTTOM  && compSnake[0].direction == "DOWN")
+		|| touchingSelf() || touchingSnake()) && moveComp) {
+		BAD_SNAKE_COLOR = vec3.clone([0.5,1,0.75]);
+		moveComp = false;
+		setTimeout(function() {
+			createCompSnake();
+		}, 1000);
+	}
+	if (moveComp) {
+		growCompSnake = touchingFood(verts);
+		// for each section
+		for (var i = 0; i < compSnake.length; i++) {
+			// move section
+			switch (compSnake[i].direction) {
+				case "UP":
+					for (var j = 0; j < 4; j++) {
+						compSnake[i].glVertices[j * 3 + 1] += 0.05;
+					}
+					break;
+				case "DOWN":
+					for (var j = 0; j < 4; j++) {
+						compSnake[i].glVertices[j * 3 + 1] -= 0.05;
+					}
+					break;
+				case "LEFT":
+					for (var j = 0; j < 4; j++) {
+						compSnake[i].glVertices[j * 3] -= 0.05;
+					}
+					break;
+				case "RIGHT":
+					for (var j = 0; j < 4; j++) {
+						compSnake[i].glVertices[j * 3] += 0.05;
+					}
+					break;
+			}
+			
+			// send the vertex coords to webGL
+			compSnakeVertexBuffers[i] = gl.createBuffer(); // init empty webgl set vertex coord buffer
+			gl.bindBuffer(gl.ARRAY_BUFFER,compSnakeVertexBuffers[i]); // activate that buffer
+			gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(compSnake[i].glVertices),gl.STATIC_DRAW); // data in
+		}
+		
+		if (growCompSnake) {
+			moveFood();
+			growComputerSnake();
+		}
+	
+		// update direction (from back of snake)
+		for (var i = compSnake.length - 1; i > 0; i--) {
+			if (compSnake[i-1].direction != compSnake[i].direction) {
+				compSnake[i].direction = compSnake[i-1].direction;
+			}
+		}
+	}
+}
+
+// UNUSED
+function turnIfNearEdge() {
+	var verts = compSnake[0].glVertices;
+	switch (compSnake[0].direction) {
+		case "UP":
+			if (round(verts[3 * 2 + 1]) == TOP) {
+				compSnake[0].direction = Math.floor(Math.random() * 2) == 0 ? "RIGHT" : "LEFT";
+				turnIfNearEdge();
+			}
+			break;
+		case "DOWN":
+			if (round(verts[3 * 0 + 1]) == BOTTOM) {
+				compSnake[0].direction = Math.floor(Math.random() * 2) == 0 ? "RIGHT" : "LEFT";
+				turnIfNearEdge();
+			}
+			break;
+		case "LEFT":
+			if (round(verts[3 * 2 + 0]) == LEFT_EDGE) {
+				compSnake[0].direction = Math.floor(Math.random() * 2) == 0 ? "UP" : "DOWN";
+				turnIfNearEdge();
+			}
+			break;
+		case "RIGHT":
+			if (round(verts[3 * 1 + 0]) == RIGHT_EDGE) {
+				compSnake[0].direction = Math.floor(Math.random() * 2) == 0 ? "UP" : "DOWN";
+				turnIfNearEdge();
+			}
+			break;
+	}
+}
+
+function randomDirection(oldDirection) {
+	var random = Math.floor(Math.random() * 4);
+	switch (random) {
+		case 0:
+			if (!oldDirection || oldDirection != "RIGHT") {
+				return "LEFT";
+			} else {
+				return randomDirection(oldDirection);
+			}
+		case 1:
+			if (!oldDirection || oldDirection != "UP") {
+				return "DOWN";
+			} else {
+				return randomDirection(oldDirection);
+			}
+		case 2:
+			if (!oldDirection || oldDirection != "LEFT") {
+				return "RIGHT";
+			} else {
+				return randomDirection(oldDirection);
+			}
+		case 3:
+			if (!oldDirection || oldDirection != "DOWN") {
+				return "UP";
+			} else {
+				return randomDirection(oldDirection);
+			}
 	}
 }
 
@@ -260,6 +482,106 @@ function touchingSelf() {
 	return false;
 }
 
+function touchingSnake() {
+	switch (compSnake[0].direction) {
+		case "UP":
+			// check verts 3 and 4 (2 & 3) of snake[0] against 1 and 2 (0 & 1) of rest of snake
+			var xLeft = round(compSnake[0].glVertices[6]);
+			var xRight = round(compSnake[0].glVertices[9]);
+			var y = round(compSnake[0].glVertices[10]);
+			for (var i = 1; i < snake.length; i++) {
+				if (round(snake[i].glVertices[0]) == xLeft && round(snake[i].glVertices[3]) == xRight && round(snake[i].glVertices[4]) == y) {
+					return true;
+				}
+			}
+			break;
+		case "DOWN":
+			// check verts 1 and 2 (0 & 1) of snake[0] against 3 and 4 (2 & 3) of rest of snake
+			var xLeft = round(compSnake[0].glVertices[0]);
+			var xRight = round(compSnake[0].glVertices[3]);
+			var y = round(compSnake[0].glVertices[4]);
+			for (var i = 1; i < snake.length; i++) {
+				if (round(snake[i].glVertices[6]) == xLeft && round(snake[i].glVertices[9]) == xRight && round(snake[i].glVertices[10]) == y) {
+					return true;
+				}
+			}
+			break;
+		case "LEFT":
+			// check verts 1 and 3 (0 & 2) of snake[0] against 2 and 4 (1 & 3) of rest of snake
+			var yBottom = round(compSnake[0].glVertices[1]);
+			var yTop = round(compSnake[0].glVertices[7]);
+			var x = round(compSnake[0].glVertices[6]);
+			for (var i = 1; i < snake.length; i++) {
+				if (round(snake[i].glVertices[4]) == yBottom && round(snake[i].glVertices[10]) == yTop && round(snake[i].glVertices[9]) == x) {
+					return true;
+				}
+			}
+			break;
+		case "RIGHT":
+			// check verts 2 and 4 (1 & 3) of snake[0] against 1 and 3 (0 & 2) of rest of snake
+			var yBottom = round(compSnake[0].glVertices[4]);
+			var yTop = round(compSnake[0].glVertices[10]);
+			var x = round(compSnake[0].glVertices[9]);
+			for (var i = 1; i < snake.length; i++) {
+				if (round(snake[i].glVertices[1]) == yBottom && round(snake[i].glVertices[7]) == yTop && round(snake[i].glVertices[6]) == x) {
+					return true;
+				}
+			}
+			break;
+	}
+	return false;
+}
+
+function touchingCompSnake() {
+	switch (snake[0].direction) {
+		case "UP":
+			// check verts 3 and 4 (2 & 3) of snake[0] against 1 and 2 (0 & 1) of rest of snake
+			var xLeft = round(snake[0].glVertices[6]);
+			var xRight = round(snake[0].glVertices[9]);
+			var y = round(snake[0].glVertices[10]);
+			for (var i = 1; i < compSnake.length; i++) {
+				if (round(compSnake[i].glVertices[0]) == xLeft && round(compSnake[i].glVertices[3]) == xRight && round(compSnake[i].glVertices[4]) == y) {
+					return true;
+				}
+			}
+			break;
+		case "DOWN":
+			// check verts 1 and 2 (0 & 1) of snake[0] against 3 and 4 (2 & 3) of rest of snake
+			var xLeft = round(snake[0].glVertices[0]);
+			var xRight = round(snake[0].glVertices[3]);
+			var y = round(snake[0].glVertices[4]);
+			for (var i = 1; i < compSnake.length; i++) {
+				if (round(compSnake[i].glVertices[6]) == xLeft && round(compSnake[i].glVertices[9]) == xRight && round(compSnake[i].glVertices[10]) == y) {
+					return true;
+				}
+			}
+			break;
+		case "LEFT":
+			// check verts 1 and 3 (0 & 2) of snake[0] against 2 and 4 (1 & 3) of rest of snake
+			var yBottom = round(snake[0].glVertices[1]);
+			var yTop = round(snake[0].glVertices[7]);
+			var x = round(snake[0].glVertices[6]);
+			for (var i = 1; i < compSnake.length; i++) {
+				if (round(compSnake[i].glVertices[4]) == yBottom && round(compSnake[i].glVertices[10]) == yTop && round(compSnake[i].glVertices[9]) == x) {
+					return true;
+				}
+			}
+			break;
+		case "RIGHT":
+			// check verts 2 and 4 (1 & 3) of snake[0] against 1 and 3 (0 & 2) of rest of snake
+			var yBottom = round(snake[0].glVertices[4]);
+			var yTop = round(snake[0].glVertices[10]);
+			var x = round(snake[0].glVertices[9]);
+			for (var i = 1; i < compSnake.length; i++) {
+				if (round(compSnake[i].glVertices[1]) == yBottom && round(compSnake[i].glVertices[7]) == yTop && round(compSnake[i].glVertices[6]) == x) {
+					return true;
+				}
+			}
+			break;
+	}
+	return false;
+}
+
 function touchingFood(verts) {
 	// check for food
 	switch (snake[0].direction) {
@@ -297,7 +619,6 @@ function moveFood() {
 	var top = (bottom + 0.05);
 	
 	FOOD_LOC = [left, bottom, right, top];
-	console.log(FOOD_LOC);
 	food.glVertices = [];
 	food.glVertices.push(left, bottom,0); // new bottom left coord
 	food.glVertices.push(right,bottom,0); // new bottom right coord
@@ -387,6 +708,7 @@ function loadSnake() {
 			
 			SNAKE_COLOR = vec3.clone([0.24,0.47,0.85]);
 			move = true;
+			moveFood();
 		} // end if file loaded
     } // end try 
     
@@ -509,6 +831,7 @@ function setupShaders() {
 } // end setup shaders
 
 var fps = 8;
+var count = 0;
 
 // render the loaded model
 function renderModels() {
@@ -531,6 +854,19 @@ function renderModels() {
 			gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,snakeTriangleBuffers[whichTriSet]); // activate
 			gl.drawElements(gl.TRIANGLES,3*snakeTriSetSizes[whichTriSet],gl.UNSIGNED_SHORT,0); // render
 			
+		} // end for each triangle set
+		
+		// render each triangle set
+		for (var whichTriSet=0; whichTriSet<numCompSnakeTriangles; whichTriSet++) {
+			gl.uniform3fv(colorULoc,BAD_SNAKE_COLOR); // pass in the diffuse reflectivity
+
+			// vertex buffer: activate and feed into vertex shader
+			gl.bindBuffer(gl.ARRAY_BUFFER,compSnakeVertexBuffers[whichTriSet]); // activate
+			gl.vertexAttribPointer(vPosAttribLoc,3,gl.FLOAT,false,0,0); // feed
+			
+			// triangle buffer: activate and render
+			gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,compSnakeTriangleBuffers[whichTriSet]); // activate
+			gl.drawElements(gl.TRIANGLES,3*compSnakeTriSetSizes[whichTriSet],gl.UNSIGNED_SHORT,0); // render
 		} // end for each triangle set
 		
 		for (var whichTriSet=0; whichTriSet<numBorderTriangles; whichTriSet++) {
@@ -558,6 +894,11 @@ function renderModels() {
 		gl.drawElements(gl.TRIANGLES,3*2,gl.UNSIGNED_SHORT,0); // render
 		
 		moveSnake();
+		moveCompSnake();
+		if (count % 10 == 0) {
+			compSnake[0].direction = randomDirection(compSnake[0].direction);
+		}
+		count += 1;
 	}, 1000 / fps);
 } // end render model
 
@@ -567,7 +908,7 @@ function main() {
 	setupWebGL(); // set up the webGL environment
 	loadSnake(); // load in the models from tri file
 	loadBorder();
-	moveFood();
+	createCompSnake();
 	setupShaders(); // setup the webGL shaders
 	renderModels(); // draw the triangles using webGL
 } // end main
